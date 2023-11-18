@@ -1,30 +1,46 @@
 import * as vscode from 'vscode';
-import * as child_process from 'child_process';
+import * as childProcess from 'child_process';
 
 class TestRunner {
+    private extensionPath: string;
+
+    constructor(extensionPath: string) {
+        this.extensionPath = extensionPath;
+    }
+
     runTests() {
         const workspaceRoot = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
-        child_process.exec(`cd ${workspaceRoot} && mix test`, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`exec error: ${error}`);
-                return;
-            }
-            console.log(`stdout: ${stdout}`);
-            console.error(`stderr: ${stderr}`);
+        const env = Object.create(process.env);
+        env.ERL_LIBS = `${this.extensionPath}/src/exunit_json_formatter/lib/`;
+
+        const child = childProcess.spawn('elixir', ['-pa', env.ERL_LIBS, '-S', 'mix', 'test', '--formatter', 'ExUnitJsonFormatter'], { cwd: workspaceRoot, env: env });
+
+        child.stdout.on('data', (data) => {
+            console.log(`stdout: ${data}`);
+        });
+
+        child.stderr.on('data', (data) => {
+            console.error(`stderr: ${data}`);
+        });
+
+        child.on('error', (error) => {
+            console.error(`exec error: ${error}`);
         });
     }
 }
 
 class TestController {
     private testController: vscode.TestController;
-    private testItems: vscode.TestItem[];
+    private testItems: vscode.TestItem[] = [];
+    private testRunner: TestRunner;
 
-    constructor() {
-        this.testController = vscode.tests.createTestController('elixirTestController', 'Elixir Test Controller');
-        this.testItems = [];
+    constructor(extensionPath: string) {
+        this.testRunner = new TestRunner(extensionPath);
+        this.testController = vscode.tests.createTestController('testController', 'Test Controller');
 
         this.testController.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, (request, token) => {
             const run = this.testController.createTestRun(request);
+            this.testRunner.runTests(); // Add this line to run the tests when the Run Tests profile is executed
             for (const item of this.testItems) {
                 run.passed(item);
             }
@@ -45,8 +61,7 @@ class TestController {
     }
 
     runTests() {
-        const testRunner = new TestRunner();
-        testRunner.runTests();
+        this.testRunner.runTests();
     }
 
     dispose() {
@@ -55,13 +70,11 @@ class TestController {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    const testController = new TestController();
+    const testController = new TestController(context.extensionPath);
 
     let disposable = vscode.commands.registerCommand('extension.runTests', () => {
         testController.runTests();
     });
-
-    context.subscriptions.push(disposable);
 
     context.subscriptions.push(testController);
 }
