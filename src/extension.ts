@@ -1,26 +1,71 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as child_process from 'child_process';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "elixir-native-test-runner" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('elixir-native-test-runner.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from Elixir Native Test Runner!');
-	});
-
-	context.subscriptions.push(disposable);
+class TestRunner {
+    runTests() {
+        const workspaceRoot = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
+        child_process.exec(`cd ${workspaceRoot} && mix test`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`exec error: ${error}`);
+                return;
+            }
+            console.log(`stdout: ${stdout}`);
+            console.error(`stderr: ${stderr}`);
+        });
+    }
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+class TestController {
+    private testController: vscode.TestController;
+    private testItems: vscode.TestItem[];
+
+    constructor() {
+        this.testController = vscode.tests.createTestController('elixirTestController', 'Elixir Test Controller');
+        this.testItems = [];
+
+        this.testController.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, (request, token) => {
+            const run = this.testController.createTestRun(request);
+            for (const item of this.testItems) {
+                run.passed(item);
+            }
+            run.end();
+        }, true);
+
+        this.testController.resolveHandler = async (item) => {
+            if (!item) {
+                item = this.testController.createTestItem('root', 'Root');
+                this.testController.items.add(item);
+                for (let i = 0; i < 5; i++) {
+                    const testItem = this.testController.createTestItem(`test${i}`, `Test ${i}`);
+                    this.testItems.push(testItem);
+                    item.children.add(testItem);
+                }
+            }
+        };
+    }
+
+    runTests() {
+        const testRunner = new TestRunner();
+        testRunner.runTests();
+    }
+
+    dispose() {
+        this.testController.dispose();
+    }
+}
+
+export function activate(context: vscode.ExtensionContext) {
+    const testController = new TestController();
+
+    let disposable = vscode.commands.registerCommand('extension.runTests', () => {
+        testController.runTests();
+    });
+
+    context.subscriptions.push(disposable);
+
+    context.subscriptions.push(testController);
+}
+
+export function deactivate() {
+    // This will be automatically called when the extension is deactivated
+}

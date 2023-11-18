@@ -14,8 +14,18 @@
   "contributes": {
     "commands": [
       {
-        "command": "elixir-native-test-runner.helloWorld",
-        "title": "Hello World"
+        "command": "extension.runTests",
+        "title": "Runs tests"
+      },
+      {
+        "command": "extension.refreshTests",
+        "title": "Refreshes tests"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "testing",
+        "contents": "No tests found. Run your tests to see them here."
       }
     ]
   },
